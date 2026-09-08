@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>图片转 PDF</title>
+<title>PDF & 图片转换工具</title>
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
   :root{
@@ -19,46 +19,75 @@
     min-height:100vh;display:flex;flex-direction:column;align-items:center;
     padding:24px 16px;
   }
-  h1{font-size:1.6rem;font-weight:700;margin-bottom:4px;letter-spacing:-.02em}
-  .subtitle{color:var(--text2);font-size:.85rem;margin-bottom:28px}
-  .container{width:100%;max-width:680px}
+  .container{width:100%;max-width:720px}
+  .header{text-align:center;margin-bottom:24px}
+  h1{font-size:1.6rem;font-weight:700;margin-bottom:6px;letter-spacing:-.02em}
+  .subtitle{color:var(--text2);font-size:.85rem;line-height:1.5}
 
+  /* 顶部 Tab 切换器 */
+  .tab-nav{
+    display:flex;background:var(--surface2);border-radius:12px;
+    padding:4px;margin-bottom:22px;border:1px solid var(--border);
+    gap:4px;
+  }
+  .tab-btn{
+    flex:1;display:flex;align-items:center;justify-content:center;gap:8px;
+    padding:10px 16px;border:none;border-radius:8px;background:transparent;
+    color:var(--text2);font-size:.9rem;font-weight:600;cursor:pointer;
+    transition:all .2s ease;touch-action:manipulation;user-select:none;
+  }
+  .tab-btn svg{width:18px;height:18px;transition:stroke .2s ease}
+  .tab-btn:hover{color:var(--text)}
+  .tab-btn.active{
+    background:var(--surface);color:var(--accent);
+    box-shadow:0 2px 8px rgba(0,0,0,.06);
+  }
+
+  /* 面板容器 */
+  .tab-panel{display:none}
+  .tab-panel.active{display:block}
+
+  /* 通用拖拽区域 */
   .drop-zone{
     border:2px dashed var(--border);border-radius:var(--radius);
-    padding:48px 24px;text-align:center;cursor:pointer;
+    padding:44px 24px;text-align:center;cursor:pointer;
     transition:all .2s;background:var(--surface);
     touch-action:manipulation;
   }
   .drop-zone:hover,.drop-zone.drag-over{
     border-color:var(--accent);background:rgba(88,86,214,.04);
   }
-  .drop-zone svg{margin-bottom:12px;opacity:.35}
+  .drop-zone svg{margin-bottom:12px;opacity:.4;color:var(--text)}
   .drop-zone p{color:var(--text2);font-size:.9rem;line-height:1.6}
-  .drop-zone .hint{font-size:.75rem;color:var(--text2);opacity:.6;margin-top:8px}
+  .drop-zone .hint{font-size:.75rem;color:var(--text2);opacity:.7;margin-top:8px}
   .drop-zone input{display:none}
 
-  .controls{
-    display:flex;gap:8px;margin-top:12px;
-  }
+  /* 通用按钮与控制条 */
+  .controls{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
   .btn{
     flex:1;padding:12px;border:none;border-radius:var(--radius);
     font-size:.9rem;font-weight:600;cursor:pointer;
-    transition:all .15s;touch-action:manipulation;
+    transition:all .15s;touch-action:manipulation;min-width:110px;
+    text-align:center;
   }
   .btn-primary{background:var(--accent);color:#fff}
   .btn-primary:hover:not(:disabled){background:var(--accent-hover)}
   .btn-primary:disabled{opacity:.35;cursor:not-allowed}
   .btn-secondary{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
-  .btn-secondary:hover{background:var(--border);color:var(--text)}
+  .btn-secondary:hover:not(:disabled){background:var(--border);color:var(--text)}
+  .btn-secondary:disabled{opacity:.4;cursor:not-allowed}
 
+  /* 通用文件信息栏 */
   .file-info{
     display:none;align-items:center;justify-content:space-between;
     margin:12px 0 8px;padding:8px 14px;
     background:var(--surface);border-radius:var(--radius);
     font-size:.82rem;color:var(--text2);border:1px solid var(--border);
   }
-  .file-info .count{color:var(--accent);font-weight:600}
+  .file-info .highlight{color:var(--accent);font-weight:600}
+  .file-info .ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%}
 
+  /* 图片列表 (图片转 PDF) */
   .image-list{
     display:flex;flex-direction:column;gap:6px;
     max-height:280px;overflow-y:auto;
@@ -97,6 +126,43 @@
   .btn-icon:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
   .btn-icon.danger:hover{background:var(--danger);border-color:var(--danger)}
 
+  /* 转换选项条 (PDF 转图片) */
+  .options{
+    display:none;margin-top:12px;padding:12px 14px;background:var(--surface);
+    border-radius:var(--radius);border:1px solid var(--border);
+  }
+  .options.active{display:block}
+  .options-row{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+  .options label{font-size:.82rem;color:var(--text2);display:flex;align-items:center;gap:6px}
+  .options select,.options input[type=number]{
+    padding:6px 10px;border:1px solid var(--border);border-radius:6px;
+    font-size:.82rem;background:var(--surface);color:var(--text);
+  }
+  .options input[type=number]{width:70px}
+
+  /* 页面预览网格 (PDF 转图片) */
+  .page-grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+    gap:10px;margin-top:16px;
+  }
+  .page-card{
+    background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    overflow:hidden;transition:border-color .15s;position:relative;
+  }
+  .page-card:hover{border-color:var(--accent)}
+  .page-card img{width:100%;display:block;background:var(--surface2)}
+  .page-card .page-footer{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:6px 8px;
+  }
+  .page-card .page-num{font-size:.75rem;color:var(--text2);font-weight:500}
+  .page-card .download-btn{
+    font-size:.7rem;padding:4px 8px;border:none;border-radius:5px;
+    background:var(--accent);color:#fff;cursor:pointer;transition:background .15s;
+  }
+  .page-card .download-btn:hover{background:var(--accent-hover)}
+
+  /* 通用进度条 */
   .progress{margin-top:12px;display:none}
   .progress.active{display:block}
   .progress-bar{
@@ -111,9 +177,10 @@
     font-size:.76rem;color:var(--text2);margin-top:6px;text-align:center;
   }
 
+  /* 限制与底部说明 */
   .limits{
     margin-top:16px;padding:12px 14px;background:var(--surface);
-    border-radius:var(--radius);font-size:.73rem;color:var(--text2);
+    border-radius:var(--radius);font-size:.74rem;color:var(--text2);
     line-height:1.7;border:1px solid var(--border);
   }
   .limits strong{color:var(--text)}
@@ -124,6 +191,7 @@
     .drop-zone svg{width:32px;height:32px}
     h1{font-size:1.3rem}
     .image-list{max-height:220px}
+    .page-grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
   }
   @media(max-width:360px){
     body{padding:12px 8px}
@@ -142,85 +210,230 @@
 <body>
 
 <div class="container">
-  <h1>图片转 PDF</h1>
-  <p class="subtitle">上传图片，生成 A4 尺寸的 PDF 文件（图片没有上传至任何服务器，所有处理都在您的浏览器中进行）</p>
+  <header class="header">
+    <h1>PDF & 图片转换工具</h1>
+    <p class="subtitle">完全在您的本地浏览器处理，无任何数据上传，保障文件安全与隐私</p>
+  </header>
 
-  <div class="drop-zone" id="dropZone">
-    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-      <polyline points="17 8 12 3 7 8"/>
-      <line x1="12" y1="3" x2="12" y2="15"/>
-    </svg>
-    <p>拖拽图片到这里，或 <strong>点击选择文件</strong></p>
-    <p class="hint">支持 JPG / PNG · 单张最大 10 MB</p>
-    <input type="file" id="fileInput" multiple accept=".jpg,.jpeg,.png,image/jpeg,image/png">
-  </div>
+  <!-- 顶部 Tab 导航 -->
+  <nav class="tab-nav" aria-label="转换模式切换">
+    <button class="tab-btn active" id="tabBtnImgToPdf" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <polyline points="21 15 16 10 5 21"/>
+      </svg>
+      图片转 PDF
+    </button>
+    <button class="tab-btn" id="tabBtnPdfToImg" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+      </svg>
+      PDF 转图片
+    </button>
+  </nav>
 
-  <div class="controls">
-    <button class="btn btn-primary" id="generateBtn" disabled>生成 PDF</button>
-    <button class="btn btn-secondary" id="clearBtn" style="display:none">清空</button>
-  </div>
+  <!-- 面板 1：图片转 PDF -->
+  <section class="tab-panel active" id="panelImgToPdf">
+    <div class="drop-zone" id="imgDropZone">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <p>拖拽图片到这里，或 <strong>点击选择文件</strong></p>
+      <p class="hint">支持 JPG / PNG · 单张最大 10 MB</p>
+      <input type="file" id="imgFileInput" multiple accept=".jpg,.jpeg,.png,image/jpeg,image/png">
+    </div>
 
-  <div class="file-info" id="fileInfo">
-    <span>已选择 <span class="count" id="fileCount">0</span> 张图片</span>
-    <span id="totalSize"></span>
-  </div>
+    <div class="controls">
+      <button class="btn btn-primary" id="generatePdfBtn" disabled>生成 PDF</button>
+      <button class="btn btn-secondary" id="clearImagesBtn" style="display:none">清空</button>
+    </div>
 
-  <div class="image-list" id="imageList"></div>
+    <div class="file-info" id="imgFileInfo">
+      <span>已选择 <span class="highlight" id="imgFileCount">0</span> 张图片</span>
+      <span id="imgTotalSize"></span>
+    </div>
 
-  <div class="progress" id="progress">
-    <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
-    <p class="progress-text" id="progressText">处理中...</p>
-  </div>
+    <div class="image-list" id="imageList"></div>
 
-  <div class="limits">
-    <strong>限制：</strong>单张 10 MB 以内 · 仅支持 JPG 和 PNG<br>
-    每页 A4（210×297mm），图片以最长边居中撑满，空白区域自动补白。
-  </div>
+    <div class="progress" id="imgProgress">
+      <div class="progress-bar"><div class="fill" id="imgProgressFill"></div></div>
+      <p class="progress-text" id="imgProgressText">处理中...</p>
+    </div>
+
+    <div class="limits">
+      <strong>限制与说明：</strong>单张 10 MB 以内 · 仅支持 JPG 和 PNG<br>
+      每页自动排版为 A4 尺寸（210×297mm），图片按最长边等比居中撑满，留白区域自动补白。
+    </div>
+  </section>
+
+  <!-- 面板 2：PDF 转图片 -->
+  <section class="tab-panel" id="panelPdfToImg">
+    <div class="drop-zone" id="pdfDropZone">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+        <polyline points="10 9 9 9 8 9"/>
+      </svg>
+      <p>拖拽 PDF 到这里，或 <strong>点击选择文件</strong></p>
+      <p class="hint">支持 PDF 格式 · 文件最大 100 MB</p>
+      <input type="file" id="pdfFileInput" accept=".pdf,application/pdf">
+    </div>
+
+    <div class="options" id="pdfOptions">
+      <div class="options-row">
+        <label>输出格式：
+          <select id="pdfFormatSelect">
+            <option value="png">PNG (无损)</option>
+            <option value="jpeg">JPG</option>
+          </select>
+        </label>
+        <label>缩放倍率：
+          <select id="pdfScaleSelect">
+            <option value="1">1x（标准大小）</option>
+            <option value="1.5">1.5x</option>
+            <option value="2" selected>2x（推荐清晰）</option>
+            <option value="3">3x（高清打印）</option>
+          </select>
+        </label>
+        <label id="pdfJpegQualityLabel" style="display:none">JPG 质量：
+          <input type="number" id="pdfJpegQualityInput" value="92" min="10" max="100" step="1">%
+        </label>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-primary" id="convertPdfBtn" disabled>开始转换</button>
+      <button class="btn btn-secondary" id="downloadAllImagesBtn" disabled>全部下载 (ZIP)</button>
+      <button class="btn btn-secondary" id="clearPdfBtn" style="display:none">清空</button>
+    </div>
+
+    <div class="file-info" id="pdfFileInfo">
+      <span class="highlight ellipsis" id="pdfFileName"></span>
+      <span id="pdfPageInfo"></span>
+    </div>
+
+    <div class="progress" id="pdfProgress">
+      <div class="progress-bar"><div class="fill" id="pdfProgressFill"></div></div>
+      <p class="progress-text" id="pdfProgressText">处理中...</p>
+    </div>
+
+    <div class="page-grid" id="pageGrid"></div>
+
+    <div class="limits">
+      <strong>限制与说明：</strong>支持最大 100 MB PDF 文档。<br>
+      倍率越高，导出的图片越清晰细腻，渲染耗时及文件体积也相应增加。可单张下载或一键打包 ZIP 下载。
+    </div>
+  </section>
 </div>
 
+<!-- 第三方库：pdf-lib (创建 PDF)、pdfjs-dist (解析 PDF)、jszip (打包 ZIP) -->
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
 <script>
-(function(){
+/**
+ * 格式化字节大小
+ * @param {number} bytes 字节大小
+ * @returns {string} 可读字符串
+ */
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+/* ==========================================================================
+   Tab 切换管理
+   ========================================================================== */
+(function setupTabs() {
+  const tabBtnImg = document.getElementById('tabBtnImgToPdf');
+  const tabBtnPdf = document.getElementById('tabBtnPdfToImg');
+  const panelImg = document.getElementById('panelImgToPdf');
+  const panelPdf = document.getElementById('panelPdfToImg');
+
+  function switchTab(target) {
+    if (target === 'img') {
+      tabBtnImg.classList.add('active');
+      tabBtnPdf.classList.remove('active');
+      panelImg.classList.add('active');
+      panelPdf.classList.remove('active');
+    } else {
+      tabBtnPdf.classList.add('active');
+      tabBtnImg.classList.remove('active');
+      panelPdf.classList.add('active');
+      panelImg.classList.remove('active');
+    }
+  }
+
+  tabBtnImg.addEventListener('click', () => switchTab('img'));
+  tabBtnPdf.addEventListener('click', () => switchTab('pdf'));
+})();
+
+/* ==========================================================================
+   功能模块一：图片转 PDF (Image -> PDF)
+   ========================================================================== */
+(function setupImageToPdf() {
   const MAX_SIZE = 10 * 1024 * 1024;
   const A4_W = 595.28;
   const A4_H = 841.89;
 
-  const dropZone = document.getElementById('dropZone');
-  const fileInput = document.getElementById('fileInput');
-  const fileInfo = document.getElementById('fileInfo');
-  const fileCount = document.getElementById('fileCount');
-  const totalSizeEl = document.getElementById('totalSize');
+  const dropZone = document.getElementById('imgDropZone');
+  const fileInput = document.getElementById('imgFileInput');
+  const fileInfo = document.getElementById('imgFileInfo');
+  const fileCount = document.getElementById('imgFileCount');
+  const totalSizeEl = document.getElementById('imgTotalSize');
   const imageList = document.getElementById('imageList');
-  const generateBtn = document.getElementById('generateBtn');
-  const clearBtn = document.getElementById('clearBtn');
-  const progress = document.getElementById('progress');
-  const progressFill = document.getElementById('progressFill');
-  const progressText = document.getElementById('progressText');
+  const generateBtn = document.getElementById('generatePdfBtn');
+  const clearBtn = document.getElementById('clearImagesBtn');
+  const progress = document.getElementById('imgProgress');
+  const progressFill = document.getElementById('imgProgressFill');
+  const progressText = document.getElementById('imgProgressText');
 
   let files = [];
 
   dropZone.addEventListener('click', () => fileInput.click());
-  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-  dropZone.addEventListener('drop', e => {
+  dropZone.addEventListener('drop', (e) => {
     e.preventDefault();
     dropZone.classList.remove('drag-over');
     addFiles(e.dataTransfer.files);
   });
-  fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
+  fileInput.addEventListener('change', () => {
+    addFiles(fileInput.files);
+    fileInput.value = '';
+  });
   generateBtn.addEventListener('click', generatePDF);
   clearBtn.addEventListener('click', clearAll);
 
   function addFiles(fileList) {
-    const valid = Array.from(fileList).filter(f => {
+    const valid = Array.from(fileList).filter((f) => {
       const isExtValid = /\.(jpe?g|png)$/i.test(f.name);
       const isMimeValid = /image\/(jpeg|png)/i.test(f.type);
-      if (!isExtValid && !isMimeValid) { alert('仅支持 JPG 和 PNG 格式'); return false; }
-      if (f.size > MAX_SIZE) { alert(f.name + ' 超过 10 MB 限制'); return false; }
+      if (!isExtValid && !isMimeValid) {
+        alert('仅支持 JPG 和 PNG 格式图片');
+        return false;
+      }
+      if (f.size > MAX_SIZE) {
+        alert(f.name + ' 超过 10 MB 限制');
+        return false;
+      }
       return true;
     });
-    valid.forEach(f => {
+
+    valid.forEach((f) => {
       f._id = Math.random().toString(36).slice(2);
       f._url = URL.createObjectURL(f);
       files.push(f);
@@ -229,13 +442,16 @@
   }
 
   function removeFile(id) {
-    const idx = files.findIndex(f => f._id === id);
-    if (idx >= 0) { URL.revokeObjectURL(files[idx]._url); files.splice(idx, 1); }
+    const idx = files.findIndex((f) => f._id === id);
+    if (idx >= 0) {
+      URL.revokeObjectURL(files[idx]._url);
+      files.splice(idx, 1);
+    }
     render();
   }
 
   function moveFile(id, dir) {
-    const idx = files.findIndex(f => f._id === id);
+    const idx = files.findIndex((f) => f._id === id);
     const next = idx + dir;
     if (next < 0 || next >= files.length) return;
     [files[idx], files[next]] = [files[next], files[idx]];
@@ -243,15 +459,10 @@
   }
 
   function clearAll() {
-    files.forEach(f => URL.revokeObjectURL(f._url));
+    files.forEach((f) => URL.revokeObjectURL(f._url));
     files = [];
     render();
-  }
-
-  function formatSize(bytes) {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / 1048576).toFixed(1) + ' MB';
+    progress.classList.remove('active');
   }
 
   function render() {
@@ -259,26 +470,28 @@
     files.forEach((f, i) => {
       const div = document.createElement('div');
       div.className = 'image-item';
-      div.innerHTML = '<img class="thumb" src="' + f._url + '" alt="">'
-        + '<div class="info">'
-        + '<div class="name">' + f.name + '</div>'
-        + '<div class="meta">#' + (i + 1) + ' · ' + formatSize(f.size) + '</div>'
-        + '</div>'
-        + '<div class="actions">'
-        + '<button class="btn-icon" data-action="up" title="上移">▲</button>'
-        + '<button class="btn-icon" data-action="down" title="下移">▼</button>'
-        + '<button class="btn-icon danger" data-action="remove" title="移除">✕</button>'
-        + '</div>';
-      div.querySelector('[data-action="up"]').addEventListener('click', function(){ moveFile(f._id, -1); });
-      div.querySelector('[data-action="down"]').addEventListener('click', function(){ moveFile(f._id, 1); });
-      div.querySelector('[data-action="remove"]').addEventListener('click', function(){ removeFile(f._id); });
+      div.innerHTML =
+        '<img class="thumb" src="' + f._url + '" alt="">' +
+        '<div class="info">' +
+        '<div class="name">' + f.name + '</div>' +
+        '<div class="meta">#' + (i + 1) + ' · ' + formatFileSize(f.size) + '</div>' +
+        '</div>' +
+        '<div class="actions">' +
+        '<button class="btn-icon" data-action="up" title="上移">▲</button>' +
+        '<button class="btn-icon" data-action="down" title="下移">▼</button>' +
+        '<button class="btn-icon danger" data-action="remove" title="移除">✕</button>' +
+        '</div>';
+
+      div.querySelector('[data-action="up"]').addEventListener('click', () => moveFile(f._id, -1));
+      div.querySelector('[data-action="down"]').addEventListener('click', () => moveFile(f._id, 1));
+      div.querySelector('[data-action="remove"]').addEventListener('click', () => removeFile(f._id));
       imageList.appendChild(div);
     });
 
-    var hasFiles = files.length > 0;
+    const hasFiles = files.length > 0;
     fileInfo.style.display = hasFiles ? 'flex' : 'none';
     fileCount.textContent = files.length;
-    totalSizeEl.textContent = formatSize(files.reduce(function(s, f){ return s + f.size; }, 0));
+    totalSizeEl.textContent = formatFileSize(files.reduce((s, f) => s + f.size, 0));
     generateBtn.disabled = !hasFiles;
     clearBtn.style.display = hasFiles ? 'block' : 'none';
   }
@@ -286,14 +499,14 @@
   /**
    * 将文件读取为 ArrayBuffer
    * @param {File} file 文件对象
-   * @returns {Promise<ArrayBuffer>} 二进制数据
+   * @returns {Promise<ArrayBuffer>}
    */
   function readFileAsArrayBuffer(file) {
-    return new Promise(function(resolve, reject) {
-      var r = new FileReader();
-      r.onload = function(){ resolve(r.result); };
-      r.onerror = reject;
-      r.readAsArrayBuffer(file);
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
     });
   }
 
@@ -303,18 +516,18 @@
    * @returns {Promise<{img: HTMLImageElement, w: number, h: number, revoke: Function}>}
    */
   function loadImageElement(file) {
-    return new Promise(function(resolve, reject) {
-      var url = URL.createObjectURL(file);
-      var img = new Image();
-      img.onload = function() {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
         resolve({
-          img: img,
+          img,
           w: img.naturalWidth,
           h: img.naturalHeight,
-          revoke: function() { URL.revokeObjectURL(url); }
+          revoke: () => URL.revokeObjectURL(url)
         });
       };
-      img.onerror = function() {
+      img.onerror = () => {
         URL.revokeObjectURL(url);
         reject(new Error('无法解析图片文件，可能文件已损坏'));
       };
@@ -324,12 +537,12 @@
 
   /**
    * 根据二进制数据头（Magic Number）判断真实图片格式
-   * @param {Uint8Array} bytes 图片二进制数组
-   * @returns {'jpeg' | 'png' | 'unknown'} 真实格式
+   * @param {Uint8Array} bytes
+   * @returns {'jpeg' | 'png' | 'unknown'}
    */
   function detectImageType(bytes) {
     // NOTE: JPEG 文件头标志 0xFF 0xD8
-    if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xD8) {
+    if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xd8) {
       return 'jpeg';
     }
     // NOTE: PNG 文件头标志 0x89 0x50 0x4E 0x47 0x0D 0x0A 0x1A 0x0A
@@ -337,12 +550,12 @@
       bytes.length >= 8 &&
       bytes[0] === 0x89 &&
       bytes[1] === 0x50 &&
-      bytes[2] === 0x4E &&
+      bytes[2] === 0x4e &&
       bytes[3] === 0x47 &&
-      bytes[4] === 0x0D &&
-      bytes[5] === 0x0A &&
-      bytes[6] === 0x1A &&
-      bytes[7] === 0x0A
+      bytes[4] === 0x0d &&
+      bytes[5] === 0x0a &&
+      bytes[6] === 0x1a &&
+      bytes[7] === 0x0a
     ) {
       return 'png';
     }
@@ -351,31 +564,35 @@
 
   /**
    * 通过 Canvas 将图片转为标准的 JPEG ArrayBuffer（用于格式回退与容错）
-   * @param {HTMLImageElement} img 图片元素
-   * @returns {Promise<ArrayBuffer>} 标准 JPEG 二进制数据
+   * @param {HTMLImageElement} img
+   * @returns {Promise<ArrayBuffer>}
    */
   function convertImageToJpegBuffer(img) {
-    return new Promise(function(resolve, reject) {
+    return new Promise((resolve, reject) => {
       try {
-        var canvas = document.createElement('canvas');
+        const canvas = document.createElement('canvas');
         canvas.width = img.naturalWidth || img.width;
         canvas.height = img.naturalHeight || img.height;
-        var ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d');
         // NOTE: 填充白色底色，避免透明背景 PNG 转 JPEG 时背景变黑
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0);
 
-        canvas.toBlob(function(blob) {
-          if (!blob) {
-            reject(new Error('Canvas 导出图片数据失败'));
-            return;
-          }
-          var reader = new FileReader();
-          reader.onload = function() { resolve(reader.result); };
-          reader.onerror = reject;
-          reader.readAsArrayBuffer(blob);
-        }, 'image/jpeg', 0.95);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error('Canvas 导出图片数据失败'));
+              return;
+            }
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(blob);
+          },
+          'image/jpeg',
+          0.95
+        );
       } catch (err) {
         reject(err);
       }
@@ -384,16 +601,15 @@
 
   /**
    * 将图片安全嵌入到 PDF 文档中，内置类型自适应与 Canvas 回退机制
-   * @param {PDFDocument} pdfDoc PDF-Lib 文档实例
-   * @param {ArrayBuffer} buf 图片 ArrayBuffer
-   * @param {HTMLImageElement} img 图片 DOM 元素
-   * @returns {Promise<PDFImage>} 嵌入后的 PDF 图片对象
+   * @param {PDFDocument} pdfDoc
+   * @param {ArrayBuffer} buf
+   * @param {HTMLImageElement} img
+   * @returns {Promise<PDFImage>}
    */
   async function embedImageSafely(pdfDoc, buf, img) {
-    var bytes = new Uint8Array(buf);
-    var realType = detectImageType(bytes);
+    const bytes = new Uint8Array(buf);
+    const realType = detectImageType(bytes);
 
-    // 1. 优先按文件真实二进制头尝试原生嵌入
     if (realType === 'jpeg') {
       try {
         return await pdfDoc.embedJpg(buf);
@@ -408,8 +624,8 @@
       }
     }
 
-    // 2. NOTE: 回退方案：当二进制头非标准，或 pdf-lib 不支持某些特定色彩空间时，通过 Canvas 重新绘制并转码为兼容的 JPEG
-    var fallbackBuf = await convertImageToJpegBuffer(img);
+    // NOTE: 回退方案：通过 Canvas 重新绘制并转码为兼容的 JPEG
+    const fallbackBuf = await convertImageToJpegBuffer(img);
     return await pdfDoc.embedJpg(fallbackBuf);
   }
 
@@ -425,79 +641,315 @@
     clearBtn.style.display = 'none';
     progress.classList.add('active');
     progressFill.style.width = '0%';
-    progressText.textContent = '正在加载...';
+    progressText.textContent = '正在准备生成...';
 
     try {
-      var PDFDocument = PDFLib.PDFDocument;
-      var rgb = PDFLib.rgb;
-      var pdfDoc = await PDFDocument.create();
+      const PDFDocument = PDFLib.PDFDocument;
+      const rgb = PDFLib.rgb;
+      const pdfDoc = await PDFDocument.create();
 
-      for (var i = 0; i < files.length; i++) {
-        var f = files[i];
-        var pct = Math.round((i / files.length) * 100);
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const pct = Math.round((i / files.length) * 100);
         progressFill.style.width = pct + '%';
         progressText.textContent = '正在处理第 ' + (i + 1) + ' / ' + files.length + ' 张图片...';
 
-        var results = await Promise.all([
+        const [buf, imgInfo] = await Promise.all([
           readFileAsArrayBuffer(f),
           loadImageElement(f)
         ]);
-        var buf = results[0];
-        var imgInfo = results[1];
 
-        var embedded;
+        let embedded;
         try {
           embedded = await embedImageSafely(pdfDoc, buf, imgInfo.img);
         } finally {
-          // 及时释放对象 URL，防止移动端与大图内存占用过高
           imgInfo.revoke();
         }
 
-        var page = pdfDoc.addPage([A4_W, A4_H]);
+        const page = pdfDoc.addPage([A4_W, A4_H]);
 
         // 填充白色背景
         page.drawRectangle({
-          x: 0, y: 0, width: A4_W, height: A4_H,
-          color: rgb(1, 1, 1),
+          x: 0,
+          y: 0,
+          width: A4_W,
+          height: A4_H,
+          color: rgb(1, 1, 1)
         });
 
-        // NOTE: 等比例缩放（contain），按最长边自适应适应 A4 页面尺寸，保证不裁切且多余区域自动补白
-        var scale = Math.min(A4_W / imgInfo.w, A4_H / imgInfo.h);
-        var drawW = imgInfo.w * scale;
-        var drawH = imgInfo.h * scale;
+        // NOTE: 等比例缩放（contain），按最长边居中撑满 A4 页面
+        const scale = Math.min(A4_W / imgInfo.w, A4_H / imgInfo.h);
+        const drawW = imgInfo.w * scale;
+        const drawH = imgInfo.h * scale;
+        const x = (A4_W - drawW) / 2;
+        const y = (A4_H - drawH) / 2;
 
-        // NOTE: 居中放置图片
-        var x = (A4_W - drawW) / 2;
-        var y = (A4_H - drawH) / 2;
-
-        page.drawImage(embedded, { x: x, y: y, width: drawW, height: drawH });
+        page.drawImage(embedded, { x, y, width: drawW, height: drawH });
       }
 
       progressFill.style.width = '100%';
-      progressText.textContent = '正在生成 PDF...';
+      progressText.textContent = '正在合成 PDF 并准备下载...';
 
-      var pdfBytes = await pdfDoc.save();
-      var blob = new Blob([pdfBytes], { type: 'application/pdf' });
-      var url = URL.createObjectURL(blob);
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
 
-      var a = document.createElement('a');
+      const a = document.createElement('a');
       a.href = url;
       a.download = 'images.pdf';
       a.click();
       URL.revokeObjectURL(url);
 
-      progressText.textContent = '完成！PDF 已下载。';
-      setTimeout(function(){ progress.classList.remove('active'); }, 2000);
+      progressText.textContent = '完成！PDF 已成功生成并下载。';
+      setTimeout(() => {
+        progress.classList.remove('active');
+      }, 2500);
     } catch (err) {
       console.error(err);
-      // NOTE: 规范化错误提示，避免显示 undefined
-      var errorMsg = (err && (err.message || (typeof err === 'string' ? err : JSON.stringify(err)))) || '处理图片时发生未知错误';
+      const errorMsg = (err && (err.message || (typeof err === 'string' ? err : JSON.stringify(err)))) || '处理图片时发生未知错误';
       progressText.textContent = '出错了：' + errorMsg;
       progressFill.style.width = '0%';
     } finally {
       generateBtn.disabled = false;
       clearBtn.style.display = files.length ? 'block' : 'none';
     }
+  }
+})();
+
+/* ==========================================================================
+   功能模块二：PDF 转图片 (PDF -> Image)
+   ========================================================================== */
+(function setupPdfToImage() {
+  const MAX_SIZE = 100 * 1024 * 1024;
+
+  const dropZone = document.getElementById('pdfDropZone');
+  const fileInput = document.getElementById('pdfFileInput');
+  const options = document.getElementById('pdfOptions');
+  const formatSelect = document.getElementById('pdfFormatSelect');
+  const scaleSelect = document.getElementById('pdfScaleSelect');
+  const jpegQualityLabel = document.getElementById('pdfJpegQualityLabel');
+  const jpegQualityInput = document.getElementById('pdfJpegQualityInput');
+  const fileInfo = document.getElementById('pdfFileInfo');
+  const fileName = document.getElementById('pdfFileName');
+  const pageInfo = document.getElementById('pdfPageInfo');
+  const convertBtn = document.getElementById('convertPdfBtn');
+  const downloadAllBtn = document.getElementById('downloadAllImagesBtn');
+  const clearBtn = document.getElementById('clearPdfBtn');
+  const progress = document.getElementById('pdfProgress');
+  const progressFill = document.getElementById('pdfProgressFill');
+  const progressText = document.getElementById('pdfProgressText');
+  const pageGrid = document.getElementById('pageGrid');
+
+  let pdfDoc = null;
+  let currentFile = null;
+  let renderedPages = [];
+
+  // 初始化 pdfjs worker
+  if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  }
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) loadFile(fileInput.files[0]);
+    fileInput.value = '';
+  });
+
+  convertBtn.addEventListener('click', convertAll);
+  downloadAllBtn.addEventListener('click', downloadAll);
+  clearBtn.addEventListener('click', clearAll);
+
+  formatSelect.addEventListener('change', () => {
+    jpegQualityLabel.style.display = formatSelect.value === 'jpeg' ? 'flex' : 'none';
+  });
+
+  async function loadFile(file) {
+    if (typeof pdfjsLib === 'undefined') {
+      alert('PDF.js 组件尚未加载完成，请稍候重试或检查网络');
+      return;
+    }
+    if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+      alert('请选择标准的 PDF 格式文件');
+      return;
+    }
+    if (file.size > MAX_SIZE) {
+      alert('文件体积超过 100 MB 限制');
+      return;
+    }
+
+    clearAll();
+    currentFile = file;
+    fileName.textContent = file.name;
+    fileInfo.style.display = 'flex';
+
+    progress.classList.add('active');
+    progressFill.style.width = '0%';
+    progressText.textContent = '正在解析 PDF 文档...';
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+      const total = pdfDoc.numPages;
+      pageInfo.textContent = '共 ' + total + ' 页 (' + formatFileSize(file.size) + ')';
+      options.classList.add('active');
+      convertBtn.disabled = false;
+      clearBtn.style.display = 'block';
+
+      progressFill.style.width = '100%';
+      progressText.textContent = '解析完成，共 ' + total + ' 页。请选择参数后点击「开始转换」';
+      setTimeout(() => {
+        progress.classList.remove('active');
+      }, 1500);
+    } catch (err) {
+      console.error(err);
+      progressText.textContent = '加载失败：' + (err.message || err);
+      progressFill.style.width = '0%';
+    }
+  }
+
+  async function convertAll() {
+    if (!pdfDoc) return;
+
+    const total = pdfDoc.numPages;
+    const scale = parseFloat(scaleSelect.value);
+    const format = formatSelect.value;
+    const quality = parseInt(jpegQualityInput.value, 10) / 100;
+
+    convertBtn.disabled = true;
+    downloadAllBtn.disabled = true;
+    pageGrid.innerHTML = '';
+    renderedPages = [];
+    progress.classList.add('active');
+    progressFill.style.width = '0%';
+
+    try {
+      for (let i = 1; i <= total; i++) {
+        const pct = Math.round(((i - 1) / total) * 100);
+        progressFill.style.width = pct + '%';
+        progressText.textContent = '正在转换第 ' + i + ' / ' + total + ' 页...';
+
+        const page = await pdfDoc.getPage(i);
+        const viewport = page.getViewport({ scale });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+
+        // 白色底色填充
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
+        const dataUrl = canvas.toDataURL(mimeType, quality);
+
+        renderedPages.push({
+          pageNum: i,
+          dataUrl,
+          width: viewport.width,
+          height: viewport.height
+        });
+
+        const card = document.createElement('div');
+        card.className = 'page-card';
+        card.innerHTML =
+          '<img src="' + dataUrl + '" alt="第' + i + '页" loading="lazy">' +
+          '<div class="page-footer">' +
+          '<span class="page-num">第 ' + i + ' 页</span>' +
+          '<button class="download-btn" data-page="' + i + '">下载</button>' +
+          '</div>';
+
+        card.querySelector('.download-btn').addEventListener('click', () => downloadPage(i));
+        pageGrid.appendChild(card);
+      }
+
+      progressFill.style.width = '100%';
+      progressText.textContent = '转换完成！共生成 ' + total + ' 张图片';
+      downloadAllBtn.disabled = false;
+      setTimeout(() => {
+        progress.classList.remove('active');
+      }, 1500);
+    } catch (err) {
+      console.error(err);
+      progressText.textContent = '转换出错：' + (err.message || err);
+      progressFill.style.width = '0%';
+    } finally {
+      convertBtn.disabled = false;
+    }
+  }
+
+  function downloadPage(pageNum) {
+    const item = renderedPages.find((x) => x.pageNum === pageNum);
+    if (!item) return;
+
+    const ext = formatSelect.value === 'png' ? 'png' : 'jpg';
+    const baseName = (currentFile ? currentFile.name.replace(/\.[^/.]+$/, '') : 'document');
+    const a = document.createElement('a');
+    a.href = item.dataUrl;
+    a.download = baseName + '_page_' + pageNum + '.' + ext;
+    a.click();
+  }
+
+  async function downloadAll() {
+    if (!renderedPages.length) return;
+    if (typeof JSZip === 'undefined') {
+      alert('JSZip 打包组件加载失败，请检查网络连接后刷新页面');
+      return;
+    }
+
+    downloadAllBtn.disabled = true;
+    downloadAllBtn.textContent = '正在打包 ZIP...';
+
+    try {
+      const zip = new JSZip();
+      const ext = formatSelect.value === 'png' ? 'png' : 'jpg';
+      const baseName = (currentFile ? currentFile.name.replace(/\.[^/.]+$/, '') : 'document');
+
+      renderedPages.forEach((p) => {
+        const base64 = p.dataUrl.split(',')[1];
+        zip.file(baseName + '_page_' + p.pageNum + '.' + ext, base64, { base64: true });
+      });
+
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = baseName + '_images.zip';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert('打包下载失败：' + (err.message || err));
+    } finally {
+      downloadAllBtn.disabled = false;
+      downloadAllBtn.textContent = '全部下载 (ZIP)';
+    }
+  }
+
+  function clearAll() {
+    pdfDoc = null;
+    currentFile = null;
+    renderedPages = [];
+    pageGrid.innerHTML = '';
+    fileInfo.style.display = 'none';
+    options.classList.remove('active');
+    convertBtn.disabled = true;
+    downloadAllBtn.disabled = true;
+    clearBtn.style.display = 'none';
+    progress.classList.remove('active');
   }
 })();
 </script>
