@@ -214,7 +214,9 @@
 
   function addFiles(fileList) {
     const valid = Array.from(fileList).filter(f => {
-      if (!/image\/(jpeg|png)/.test(f.type)) { alert('仅支持 JPG 和 PNG 格式'); return false; }
+      const isExtValid = /\.(jpe?g|png)$/i.test(f.name);
+      const isMimeValid = /image\/(jpeg|png)/i.test(f.type);
+      if (!isExtValid && !isMimeValid) { alert('仅支持 JPG 和 PNG 格式'); return false; }
       if (f.size > MAX_SIZE) { alert(f.name + ' 超过 10 MB 限制'); return false; }
       return true;
     });
@@ -281,6 +283,11 @@
     clearBtn.style.display = hasFiles ? 'block' : 'none';
   }
 
+  /**
+   * 将文件读取为 ArrayBuffer
+   * @param {File} file 文件对象
+   * @returns {Promise<ArrayBuffer>} 二进制数据
+   */
   function readFileAsArrayBuffer(file) {
     return new Promise(function(resolve, reject) {
       var r = new FileReader();
@@ -290,17 +297,129 @@
     });
   }
 
-  function loadImageDimensions(file) {
+  /**
+   * 加载图片元素以获取自然尺寸及供 Canvas 回退使用
+   * @param {File} file 文件对象
+   * @returns {Promise<{img: HTMLImageElement, w: number, h: number, revoke: Function}>}
+   */
+  function loadImageElement(file) {
     return new Promise(function(resolve, reject) {
+      var url = URL.createObjectURL(file);
       var img = new Image();
-      img.onload = function(){ resolve({ w: img.naturalWidth, h: img.naturalHeight }); URL.revokeObjectURL(img.src); };
-      img.onerror = reject;
-      img.src = URL.createObjectURL(file);
+      img.onload = function() {
+        resolve({
+          img: img,
+          w: img.naturalWidth,
+          h: img.naturalHeight,
+          revoke: function() { URL.revokeObjectURL(url); }
+        });
+      };
+      img.onerror = function() {
+        URL.revokeObjectURL(url);
+        reject(new Error('无法解析图片文件，可能文件已损坏'));
+      };
+      img.src = url;
     });
+  }
+
+  /**
+   * 根据二进制数据头（Magic Number）判断真实图片格式
+   * @param {Uint8Array} bytes 图片二进制数组
+   * @returns {'jpeg' | 'png' | 'unknown'} 真实格式
+   */
+  function detectImageType(bytes) {
+    // NOTE: JPEG 文件头标志 0xFF 0xD8
+    if (bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xD8) {
+      return 'jpeg';
+    }
+    // NOTE: PNG 文件头标志 0x89 0x50 0x4E 0x47 0x0D 0x0A 0x1A 0x0A
+    if (
+      bytes.length >= 8 &&
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4E &&
+      bytes[3] === 0x47 &&
+      bytes[4] === 0x0D &&
+      bytes[5] === 0x0A &&
+      bytes[6] === 0x1A &&
+      bytes[7] === 0x0A
+    ) {
+      return 'png';
+    }
+    return 'unknown';
+  }
+
+  /**
+   * 通过 Canvas 将图片转为标准的 JPEG ArrayBuffer（用于格式回退与容错）
+   * @param {HTMLImageElement} img 图片元素
+   * @returns {Promise<ArrayBuffer>} 标准 JPEG 二进制数据
+   */
+  function convertImageToJpegBuffer(img) {
+    return new Promise(function(resolve, reject) {
+      try {
+        var canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        var ctx = canvas.getContext('2d');
+        // NOTE: 填充白色底色，避免透明背景 PNG 转 JPEG 时背景变黑
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+
+        canvas.toBlob(function(blob) {
+          if (!blob) {
+            reject(new Error('Canvas 导出图片数据失败'));
+            return;
+          }
+          var reader = new FileReader();
+          reader.onload = function() { resolve(reader.result); };
+          reader.onerror = reject;
+          reader.readAsArrayBuffer(blob);
+        }, 'image/jpeg', 0.95);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  /**
+   * 将图片安全嵌入到 PDF 文档中，内置类型自适应与 Canvas 回退机制
+   * @param {PDFDocument} pdfDoc PDF-Lib 文档实例
+   * @param {ArrayBuffer} buf 图片 ArrayBuffer
+   * @param {HTMLImageElement} img 图片 DOM 元素
+   * @returns {Promise<PDFImage>} 嵌入后的 PDF 图片对象
+   */
+  async function embedImageSafely(pdfDoc, buf, img) {
+    var bytes = new Uint8Array(buf);
+    var realType = detectImageType(bytes);
+
+    // 1. 优先按文件真实二进制头尝试原生嵌入
+    if (realType === 'jpeg') {
+      try {
+        return await pdfDoc.embedJpg(buf);
+      } catch (e) {
+        console.warn('直接嵌入 JPEG 失败，将使用 Canvas 转码后重试', e);
+      }
+    } else if (realType === 'png') {
+      try {
+        return await pdfDoc.embedPng(buf);
+      } catch (e) {
+        console.warn('直接嵌入 PNG 失败，将使用 Canvas 转码后重试', e);
+      }
+    }
+
+    // 2. NOTE: 回退方案：当二进制头非标准，或 pdf-lib 不支持某些特定色彩空间时，通过 Canvas 重新绘制并转码为兼容的 JPEG
+    var fallbackBuf = await convertImageToJpegBuffer(img);
+    return await pdfDoc.embedJpg(fallbackBuf);
   }
 
   async function generatePDF() {
     if (!files.length) return;
+
+    if (typeof PDFLib === 'undefined') {
+      alert('PDF 核心组件尚未加载完成，请稍候重试或检查网络');
+      return;
+    }
 
     generateBtn.disabled = true;
     clearBtn.style.display = 'none';
@@ -321,36 +440,33 @@
 
         var results = await Promise.all([
           readFileAsArrayBuffer(f),
-          loadImageDimensions(f)
+          loadImageElement(f)
         ]);
         var buf = results[0];
-        var dims = results[1];
+        var imgInfo = results[1];
 
         var embedded;
-        if (f.type === 'image/png') {
-          embedded = await pdfDoc.embedPng(buf);
-        } else {
-          embedded = await pdfDoc.embedJpg(buf);
+        try {
+          embedded = await embedImageSafely(pdfDoc, buf, imgInfo.img);
+        } finally {
+          // 及时释放对象 URL，防止移动端与大图内存占用过高
+          imgInfo.revoke();
         }
 
         var page = pdfDoc.addPage([A4_W, A4_H]);
 
+        // 填充白色背景
         page.drawRectangle({
           x: 0, y: 0, width: A4_W, height: A4_H,
           color: rgb(1, 1, 1),
         });
 
-        var imgAspect = dims.w / dims.h;
-        var drawW, drawH;
+        // NOTE: 等比例缩放（contain），按最长边自适应适应 A4 页面尺寸，保证不裁切且多余区域自动补白
+        var scale = Math.min(A4_W / imgInfo.w, A4_H / imgInfo.h);
+        var drawW = imgInfo.w * scale;
+        var drawH = imgInfo.h * scale;
 
-        if (imgAspect >= 1) {
-          drawW = A4_W;
-          drawH = A4_W / imgAspect;
-        } else {
-          drawH = A4_H;
-          drawW = A4_H * imgAspect;
-        }
-
+        // NOTE: 居中放置图片
         var x = (A4_W - drawW) / 2;
         var y = (A4_H - drawH) / 2;
 
@@ -374,7 +490,9 @@
       setTimeout(function(){ progress.classList.remove('active'); }, 2000);
     } catch (err) {
       console.error(err);
-      progressText.textContent = '出错了：' + err.message;
+      // NOTE: 规范化错误提示，避免显示 undefined
+      var errorMsg = (err && (err.message || (typeof err === 'string' ? err : JSON.stringify(err)))) || '处理图片时发生未知错误';
+      progressText.textContent = '出错了：' + errorMsg;
       progressFill.style.width = '0%';
     } finally {
       generateBtn.disabled = false;
